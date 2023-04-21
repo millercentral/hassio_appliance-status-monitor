@@ -1,7 +1,7 @@
 blueprint:
   name: Appliance State Monitor
   description: >-
-    `- Version: 3.0.0 - millercentral`
+    `- Version: 3.1.0 - millercentral`
 
 
     ASM ('Appliance State Monitor') is an automation that can detect and monitor the state of your appliances through smart plugs.
@@ -17,12 +17,12 @@ blueprint:
 
     The [state machine](https://github.com/millercentral/hassio_appliance-status-monitor) is extensible, and you can run custom actions for each state change.
 
-
     In the setup process I will refer to the appliance's operations with the generic word 'job'. A 'job' could be anything (washing, rinsing, etc.), 
     you can later specify what that word means in your case.
 
-    This version has been modified by millercentral to support door sensors which will impact the appliance state (set paused or transition from complete -> idle).
-    This version also removes overload status tracking.
+    This blueprint is based on the excellent work by [leofabri](https://github.com/leofabri/hassio_appliance-status-monitor) and has been modified 
+    by millercentral to support door sensors which will impact the appliance state (set paused or transition from complete -> idle). This version also 
+    removes overload status tracking.
 
     <strong>First setup?</strong> <i>[Follow the instructions](https://github.com/millercentral/hassio_appliance-status-monitor)</i>
   domain: automation
@@ -56,9 +56,10 @@ blueprint:
     appliance_door_sensor:
       name: Appliance Door Sensor
       description: >-
-        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_door_sensor</i></strong>)
+        (*REQUIRED | binary_sensor)
 
-        While in job_completed state, wait until this door sensor changes from closed to open to transition back to idle state.
+        Sensor to indicate when appliance door is opened. Used to change state from job_running -> paused or
+        from job_completed -> idle when the appliance door opens.
       default: []
       selector:
         entity:
