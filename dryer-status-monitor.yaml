@@ -150,30 +150,6 @@ blueprint:
         entity:
           domain: timer
 
-    delayed_job_ongoing_duration:
-      name: Delayed Job Ongoing duration
-      description: >-
-        (OPTIONAL | <i><strong>Suggested: 0, Default: 0 | DISABLED</strong></i>)
-
-
-        During a job cycle, some appliances may intermittently use more power than the starting power threshold, 
-        thus entering the job_ongoing state (even when the job is not really started).
-
-        With this value set, the automation will wait for the indicated time in seconds, and see if in that timespan the power consumption stays higher than the starting power threshold.
-
-        ...
-
-        <i><strong>WARNING:</strong> Setting a duration introduces a delay on the transition to the 'job_ongoing' state.
-        Please make sure that you really need this, or leave it 0 if unsure.</i>
-      default: 0.0
-      selector:
-        number:
-          min: 0.0
-          max: 900.0
-          step: 1.0
-          unit_of_measurement: seconds
-          mode: slider
-
     automation_self_trigger:
       name: Automation Self-triggering entity
       description: >-
