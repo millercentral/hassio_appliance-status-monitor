@@ -1,7 +1,7 @@
 blueprint:
-  name: Appliance State Monitor
+  name: Dryer State Monitor
   description: >-
-    `- Version: 3.1.0 - millercentral`
+    `- Version: 3.1.1 - millercentral (smartdry)`
 
 
     Dryer Status Monitor is modified version of [ASM](https://github.com/millercentral/hassio_appliance-status-monitor/blob/main/appliance-status-monitor.yaml) to monitor dryer state based on a SmartDry bluetooth LE device.
