@@ -11,12 +11,6 @@ timer:
     restore: true
     icon: mdi:tumble-dryer
 
-  dryer_job_completed_persistence_timer:
-    name: Dryer - Job completed persistence timer
-    duration: "01:30:00" # <- Notice the time here. Leave as it is (1h 30 min)
-    restore: true
-    icon: mdi:tumble-dryer
-
 input_boolean:
   dryer_job_cycle:
     name: Dryer - Job Cycle
@@ -30,19 +24,16 @@ input_select:
   dryer_state_machine:
     name: Dryer - State Machine
     options:
-      - unplugged
       - idle
-      - paused
-      - detached_overload
       - job_ongoing
       - job_completed
     icon: mdi:tumble-dryer
 
 #________________________
 # * ADDITIONAL FEATURES *
-template: [] # <- IMPORTANT! Remove the [] if you enable any macro
+template: # <- IMPORTANT! Remove the [] if you enable any macro
   ## -- MACROS --
-  ## 
+  ##
   ## **OPTIONAL**
   ## NAME: State translation macro
   ## INSTRUCTIONS: https://github.com/leofabri/hassio_appliance-status-monitor/issues/16#issuecomment-1211764562
@@ -53,23 +44,20 @@ template: [] # <- IMPORTANT! Remove the [] if you enable any macro
   ##
   ##             It allows you to customize how each state should be displayed on the UI.
 
-  ## The template below is disabled by default, 
+  ## The template below is disabled by default,
   ## if you want to enable it you need to uncomment the lines that will follow (remove all the '# ').
-  ## Press ctrl + K & ctrl + U to uncomment from VSCode. 
+  ## Press ctrl + K & ctrl + U to uncomment from VSCode.
 
-#   - sensor:
-#       - name: Dryer Current State - Translated
-#         unique_id: washing_machine_current_state_translated
-#         state: >
-#           {%- macro state_machine_translation(state) -%}
-#           {% set STATE_MACHINE_TRANSLATION = {
-#             "unplugged": "Unplugged",
-#             "idle": "Idle",
-#             "paused": "Paused",
-#             "detached_overload": "Overload",
-#             "job_ongoing": "Drying",
-#             "job_completed": "Drying completed",
-#           } %}
-#           {{ STATE_MACHINE_TRANSLATION[state]}}
-#           {%- endmacro -%}
-#           {{ state_machine_translation(states('input_select.dryer_state_machine')) }}
+  - sensor:
+      - name: Dryer State
+        unique_id: dryer_state
+        state: >
+          {%- macro state_machine_translation(state) -%}
+          {% set STATE_MACHINE_TRANSLATION = {
+            "idle": "Idle",
+            "job_ongoing": "Drying",
+            "job_completed": "Done",
+          } %}
+          {{ STATE_MACHINE_TRANSLATION[state]}}
+          {%- endmacro -%}
+          {{ state_machine_translation(states('input_select.dryer_state_machine')) }}

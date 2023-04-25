@@ -1,0 +1,705 @@
+blueprint:
+  name: Appliance State Monitor
+  description: >-
+    `- Version: 3.1.0 - millercentral`
+
+
+    Dryer Status Monitor is modified version of [ASM](https://github.com/millercentral/hassio_appliance-status-monitor/blob/main/appliance-status-monitor.yaml) to monitor dryer state based on a SmartDry bluetooth LE device.
+
+    You be able to pair this project with other automations and services.
+
+    The [state machine](https://github.com/millercentral/hassio_appliance-status-monitor) is extensible, and you can run custom actions for each state change.
+
+    This blueprint is based on the excellent work by [leofabri](https://github.com/leofabri/hassio_appliance-status-monitor) and has been modified 
+    by millercentral to support door sensors which will impact the appliance state (set paused or transition from complete -> idle). This version also 
+    removes overload status tracking.
+
+  domain: automation
+  input:
+    # SENSOR for SmartDry shake
+    smartdry_shake:
+      name: SmartDry Shake Entity
+      description: >-
+        (*REQUIRED | sensor)
+
+
+        Entity for SmartDry that describes the shake value.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+
+    # SENSOR for appliance door
+    appliance_door_sensor:
+      name: Dryer Door Sensor
+      description: >-
+        (*REQUIRED | binary_sensor)
+
+        Sensor to indicate when appliance door is opened. Used to change state from job_running -> paused or
+        from job_completed -> idle when the appliance door opens.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+
+    # TIMER delayed_job_ongoing_timer
+    delayed_job_ongoing_timer:
+      name: Delayed Job Ongoing timer
+      description: >-
+        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_delayed_job_ongoing_timer</i></strong> | [?](https://github.com/leofabri/hassio_appliance-status-monitor/blob/b71e28faca532a8a0192e43433e91ce958025d58/home%20assistant/packages/universal/asm_your_appliance_name.yaml#L21))
+
+
+        The timer that will allow to 'wait' & 'see' before assuming that a new job has started.
+      default: []
+      selector:
+        entity:
+          domain: timer
+
+    delayed_job_ongoing_duration:
+      name: Delayed Job Ongoing duration
+      description: >-
+        (OPTIONAL | <i><strong>Suggested: 0, Default: 0 | DISABLED</strong></i>)
+
+
+        During a job cycle, some appliances may intermittently use more power than the starting power threshold, 
+        thus entering the job_ongoing state (even when the job is not really started).
+
+        With this value set, the automation will wait for the indicated time in seconds, and see if in that timespan the power consumption stays higher than the starting power threshold.
+
+        ...
+
+        <i><strong>WARNING:</strong> Setting a duration introduces a delay on the transition to the 'job_ongoing' state.
+        Please make sure that you really need this, or leave it 0 if unsure.</i>
+      default: 0.0
+      selector:
+        number:
+          min: 0.0
+          max: 900.0
+          step: 1.0
+          unit_of_measurement: seconds
+          mode: slider
+
+    # INPUT_SELECT for state machine
+    appliance_state_machine:
+      name: Dryer State Machine
+      description: >-
+        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_state_machine</strong></i> | [?](https://github.com/leofabri/hassio_appliance-status-monitor/blob/main/home%20assistant/packages/your_appliance_name.yaml#L18))
+
+
+        The State Machine entity of this appliance.
+      default: []
+      selector:
+        entity:
+          domain: input_select
+
+    appliance_job_cycle:
+      name: Dryer Job Cycle
+      description: >-
+        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_job_cycle</strong></i> | [?](https://github.com/leofabri/hassio_appliance-status-monitor/blob/b71e28faca532a8a0192e43433e91ce958025d58/home%20assistant/packages/universal/asm_your_appliance_name.yaml#L33))
+
+
+        A variable that stores whether the appliance is still in a job cycle
+        or not.<br>
+
+        This is a boolean (so: 0 or 1).<br> <strong>off</strong> -> the appliance is
+        not doing any job<br> <strong>on</strong> -> the job is incomplete.
+        <br>
+
+        <strong>Note that this bare entity does not provide any information about the detailed status
+        of the machine (like an overload stuation).</strong>
+        <br>
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+
+    # TIMER delayed_job_completion_timer
+    delayed_job_completion_timer:
+      name: Job Completion | Delayed Job Completion timer
+      description: >-
+        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_delayed_job_completion_timer</i></strong> | [?](https://github.com/leofabri/hassio_appliance-status-monitor/blob/b71e28faca532a8a0192e43433e91ce958025d58/home%20assistant/packages/universal/asm_your_appliance_name.yaml#L15))
+
+
+        The timer that will allow to 'wait' & 'see' before assuming that a job has been completed.
+      default: []
+      selector:
+        entity:
+          domain: timer
+
+    automation_self_trigger:
+      name: Automation Self-triggering entity
+      description: >-
+        (*REQUIRED | Helper | Name: <i><strong><your_appliance_name>_automation_self_trigger</i></strong> | [?](https://github.com/leofabri/hassio_appliance-status-monitor/blob/b71e28faca532a8a0192e43433e91ce958025d58/home%20assistant/packages/universal/asm_your_appliance_name.yaml#L38))
+
+
+        The in charge of triggering the execution of the automation when it changes from off -> on.
+
+        Sometimes, if the power consumption of the appliance is perfectly steady (or 0), no other trigger will work, and the automation is stuck. This entity solves the problem.
+      default: []
+      selector:
+        entity:
+          domain: input_boolean
+
+    #####################
+    # FLAG: ACTIONS #
+    #####################
+    actions_new_job_cycle_begins:
+      name: CUSTOM ACTION(S) | When a new job cycle begins
+      description: >-
+        Executed when the appliance starts a new job cycle (<strong>idle -> job_ongoing</strong>
+        state).
+
+        ...
+
+        <i>**WARNING:** Just use non-blocking actions in this space! No delays, actionable notifications, TTS, waits, or anything that takes time to execute. 
+        Please consider that the permanence in this state could last for a limited amount of time (seconds, potentially!). 
+        This section is meant to be used to trigger other things like scripts.</i>
+
+        If you need to use it for time-consuming operations, you have two options: dispatch the work by calling other scripts, or use the State Machine entity to wake up other external automations.
+      default: []
+      selector:
+        action:
+    actions_job_cycle_ends:
+      name: CUSTOM ACTION(S) | When a job cycle is finished
+      description: >-
+        Executed when the appliance finishes a job cycle (<strong>job_ongoing -> job_completed</strong>
+        state).
+
+        ...
+
+        <i>**WARNING:** Just use non-blocking actions in this space! No delays, actionable notifications, TTS, waits, or anything that takes time to execute. 
+        Please consider that the permanence in this state could last for a limited amount of time (seconds, potentially!). 
+        This section is meant to be used to trigger other things like scripts.</i>
+
+        If you need to use it for time-consuming operations, you have two options: dispatch the work by calling other scripts, or use the State Machine entity to wake up other external automations.
+      default: []
+      selector:
+        action:
+
+  source_url: https://github.com/millercentral/hassio_appliance-status-monitor/blob/main/dryer-status-monitor.yaml
+
+# FLAG: Variables
+variables:
+  # Socket info
+  appliance_socket: !input "smartdry_shake"
+  # Door info
+  appliance_door_sensor: !input "appliance_door_sensor"
+
+  # Delays
+  delayed_job_ongoing_duration: !input "delayed_job_ongoing_duration" # precedes job_start
+  delayed_job_completion_duration: !input "delayed_job_completion_duration" # precedes job_completed
+
+  # Timer entities
+  delayed_job_ongoing_timer: !input "delayed_job_ongoing_timer" # precedes job_start
+  delayed_job_completion_timer: !input "delayed_job_completion_timer" # precedes job_completed
+
+  LOG_WAIT: "WAIT"
+  LOG_STATE_CHANGE: "STATE CHANGE"
+  LOG_TIMER: "TIMER"
+  LOG_CYCLE_START: "CYCLE START"
+  LOG_CYCLE_END: "CYCLE END"
+  LOG_CUSTOM_ACTIONS: "CUSTOM ACTIONS"
+  LOG_POWER_THRESHOLD: "POWER_THRESHOLD"
+  LOG_LEVEL: debug
+  LOG_LOGGER: homeassistant.components.dryer_state_blueprint
+
+# FLAG: Triggers
+trigger:
+  - platform: state
+    entity_id: !input "smartdry_shake"
+    id: smartdry_shake_change_event
+  - platform: state
+    entity_id: !input "automation_self_trigger"
+    from: "off"
+    to: "on"
+    id: automation_self_triggered
+  - platform: state
+    entity_id: !input "appliance_door_sensor"
+    from: "off"
+    to: "on"
+    id: appliance_door_opened_event
+
+  # EVENTS from timers
+  - platform: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input "delayed_job_ongoing_timer"
+    id: job_started_timer_finished
+  - platform: event
+    event_type: timer.finished
+    event_data:
+      entity_id: !input "delayed_job_completion_timer"
+    id: job_completed_timer_finished
+  # ----
+
+  # EVENTS from Home Assistant
+  - platform: homeassistant
+    event: start
+    id: home_assistant_started_event
+  - platform: event
+    event_type:
+      - automation_reloaded
+    id: automation_reloaded_event
+  # ----
+
+condition:
+  # Accepted triggers:
+  - condition: or
+    conditions:
+      - condition: trigger
+        id: smartdry_shake_event
+      - condition: trigger
+        id: appliance_door_opened
+      - condition: trigger
+        id: automation_self_triggered
+      - condition: trigger
+        id: job_started_timer_finished
+      - condition: trigger
+        id: job_completed_timer_finished
+      - condition: trigger
+        id: home_assistant_started_event
+      - condition: trigger
+        id: automation_reloaded_event
+
+# FLAG: Logic
+action:
+  - service: input_boolean.turn_off
+    data: {}
+    target:
+      entity_id: !input "automation_self_trigger"
+
+  ##################################################
+  # NOTE: "job_ongoing" state handling logic       #
+  ##################################################
+  - choose:
+      # IF (and)
+      - conditions:
+          # the power consumption > appliance_starting_power_threshold
+          - condition: numeric_state
+            entity_id: !input "smartdry_shake"
+            above: 10
+        sequence:
+          # Delete the delayed_job_completion_timer if it's running
+          # If the job completed timer is running, then the power consumption was high enough.
+          # The delayed_job_completion_timer timer has to be discarded
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(delayed_job_completion_timer) == 'active' }}"
+                sequence:
+                  - service: timer.cancel
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_completion_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - The starting power threshold was surpassed again => delayed_job_completion_timer canceled and stopped"
+                  # ***********************
+          - choose:
+              # IF
+              - conditions:
+                  # Start the timer only if the state is not already job_ongoing
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: !input "appliance_state_machine"
+                        state: job_ongoing
+                  # the delayed_job_ongoing_timer isn't active
+                  - condition: template
+                    value_template: "{{ states(delayed_job_ongoing_timer) != 'active' }}"
+                  # the job_completed_timer wasn't the one that triggered this automation
+                  - condition: not
+                    conditions:
+                      - condition: trigger
+                        id: job_started_timer_finished
+                sequence:
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_POWER_THRESHOLD }} - The starting power threshold was reached"
+                  # ***********************
+                  # Start the timer, start counting backwards
+                  - service: timer.start
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_ongoing_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - delayed_job_ongoing_timer start invoked. Now it's {{ states(delayed_job_ongoing_timer) }}"
+                  # ***********************
+          - choose:
+              # if the timer should last for a time that is not 0
+              - conditions:
+                  - condition: template
+                    value_template: "{{ delayed_job_ongoing_duration > 0 }}"
+                sequence:
+                  - choose:
+                      # if the elapsed time is less than the wanted delayed_job_ongoing_duration
+                      - conditions:
+                          - condition: template
+                            value_template: |-
+                              {% if states(delayed_job_ongoing_timer) == 'active' %}
+                                {% set t_expiring_date = state_attr(delayed_job_ongoing_timer, 'finishes_at') %}
+                                {% set t_remaining_sec = 0 if t_expiring_date == None else (as_datetime(t_expiring_date) - now()).total_seconds() | int %}
+                                {% set t_total_duration = state_attr(delayed_job_ongoing_timer, 'duration') %}
+                                {% set duration_split = t_total_duration.split(':') %}
+                                {% set t_total_duration_sec  = (duration_split[0] | int * 3600) + (duration_split[1] | int * 60) + (duration_split[0] | int) %}
+                                {% set t_elapsed_sec = (t_total_duration_sec - t_remaining_sec) | int %}
+                                {{ t_elapsed_sec < (delayed_job_ongoing_duration) | int }}
+                              {% else %}
+                                {{0}}
+                              {% endif %}
+                        sequence:
+                          # ***** LOG SECTION *****
+                          - service: system_log.write
+                            data_template:
+                              level: "{{ LOG_LEVEL }}"
+                              logger: "{{ LOG_LOGGER }}"
+                              message: "{{ LOG_WAIT }} - Waiting {{ delayed_job_ongoing_duration }} seconds, then I will decide if job_ongoing state should be entered."
+                          # ***********************
+                          # try to wait here until the remaining time is elapsed
+                          - delay:
+                              seconds: |-
+                                {% if states(delayed_job_ongoing_timer) == 'active' %}
+                                  {% set t_expiring_date = state_attr(delayed_job_ongoing_timer, 'finishes_at') %}
+                                  {% set t_remaining_sec = 0 if t_expiring_date == None else (as_datetime(t_expiring_date) - now()).total_seconds() | int %}
+                                  {% set t_total_duration = state_attr(delayed_job_ongoing_timer, 'duration') %}
+                                  {% set duration_split = t_total_duration.split(':') %}
+                                  {% set t_total_duration_sec  = (duration_split[0] | int * 3600) + (duration_split[1] | int * 60) + (duration_split[0] | int) %}
+                                  {% set t_elapsed_sec = (t_total_duration_sec - t_remaining_sec) | int %}
+                                  {% set t_remaining = ((delayed_job_ongoing_duration) | int) - t_elapsed_sec %}
+                                  
+                                  {{ 1 + t_remaining }}
+                                {% else %}
+                                  {{ 1 + (delayed_job_ongoing_duration) | int }}
+                                {% endif %}
+                          # if the delay is elapsed, self trig the atomation
+                          - service: input_boolean.turn_on
+                            data: {}
+                            target:
+                              entity_id: !input "automation_self_trigger"
+                          # make sure that the execution doesn't continue. So that the job_completed state is not reached.
+                          - stop: ""
+            default: [] # Do nothing. End
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input "appliance_state_machine"
+                state: job_ongoing
+          - service: input_select.select_option
+            data:
+              option: job_ongoing # FLAG: job_ongoing STATE TRANSITION
+            target:
+              entity_id: !input "appliance_state_machine"
+          # ***** LOG SECTION *****
+          - service: system_log.write
+            data_template:
+              level: "{{ LOG_LEVEL }}"
+              logger: "{{ LOG_LOGGER }}"
+              message: "{{ LOG_STATE_CHANGE }} - Entered the job_ongoing state."
+          # ***********************
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(delayed_job_ongoing_timer) == 'active' }}"
+                sequence:
+                  - service: timer.cancel
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_ongoing_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - delayed_job_ongoing_timer canceled and stopped."
+                  # ***********************
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input "appliance_job_cycle"
+                    state: "off"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data: {}
+                    target:
+                      entity_id: !input "appliance_job_cycle"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_CYCLE_START }} - A new Job Cycle started"
+                  # ***********************
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_CUSTOM_ACTIONS }} - executing actions_new_job_cycle_begins."
+                  # ***********************
+                  - choose: []
+                    default: !input "actions_new_job_cycle_begins"
+            default:
+              # ***** LOG SECTION *****
+              - service: system_log.write
+                data_template:
+                  level: "{{ LOG_LEVEL }}"
+                  logger: "{{ LOG_LOGGER }}"
+                  message: "{{ LOG_CUSTOM_ACTIONS }} - executing actions_job_cycle_resumes."
+              # ***********************
+              - choose: []
+                default: !input "actions_job_cycle_resumes"
+
+      ##################################################
+      # NOTE: "job_completed" state handling logic     #
+      ##################################################
+      # IF
+      - conditions:
+          # The job is currently ongoing
+          - condition: state
+            entity_id: !input "appliance_state_machine"
+            state: job_ongoing
+          # The job cycle is still in progress
+          - condition: state
+            entity_id: !input "appliance_job_cycle"
+            state: "on"
+          # A value below the finishing shake threshold is received
+          - condition: numeric_state
+            entity_id: !input "smartdry_shake"
+            below: 10
+        sequence:
+          # ***** LOG SECTION *****
+          - service: system_log.write
+            data_template:
+              level: "{{ LOG_LEVEL }}"
+              logger: "{{ LOG_LOGGER }}"
+              message: "{{ LOG_POWER_THRESHOLD }} - The finishing power threshold was reached"
+          # ***********************
+          - choose:
+              # IF
+              - conditions:
+                  # If the state machine isn't already in the job_completed state
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: !input "appliance_state_machine"
+                        state: job_completed
+                  # the timer isn't active
+                  - condition: template
+                    value_template: "{{ states(delayed_job_completion_timer) != 'active' }}"
+                  # the job_completed_timer didn't trigger this automation this time
+                  - condition: not
+                    conditions:
+                      - condition: trigger
+                        id: job_completed_timer_finished
+                sequence:
+                  # Start the timer, start counting backwards
+                  - service: timer.start
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_completion_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - delayed_job_completion_timer start invoked. Now it's {{ states(delayed_job_completion_timer) }}"
+                  # ***********************
+          - choose:
+              # if the timer should last for a time that is not 0
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(delayed_job_completion_timer) == 'active' }}"
+                  - condition: template
+                    value_template: "{{ delayed_job_completion_duration > 0 }}"
+                sequence:
+                  - choose:
+                      # if the elapsed time is less than the wanted delayed_job_completion_duration
+                      - conditions:
+                          # - condition: not
+                          #   conditions:
+                          #     - condition: template
+                          #       value_template: >
+                          #         {{ appliance_job_completed_when_socket_is_off }}
+                          - condition: template
+                            value_template: |-
+                              {% if states(delayed_job_completion_timer) == 'active' %}
+                                {% set t_expiring_date = state_attr(delayed_job_completion_timer, 'finishes_at') %}
+                                {% set t_remaining_sec = 0 if t_expiring_date == None else (as_datetime(t_expiring_date) - now()).total_seconds() | int %}
+                                {% set t_total_duration = state_attr(delayed_job_completion_timer, 'duration') %}
+                                {% set duration_split = t_total_duration.split(':') %}
+                                {% set t_total_duration_sec  = (duration_split[0] | int * 3600) + (duration_split[1] | int * 60) + (duration_split[0] | int) %}
+                                {% set t_elapsed_sec = (t_total_duration_sec - t_remaining_sec) | int %}
+                                {{ t_elapsed_sec < (delayed_job_completion_duration) | int }}
+                              {% else %}
+                                {{0}}
+                              {% endif %}
+                        sequence:
+                          # ***** LOG SECTION *****
+                          - service: system_log.write
+                            data_template:
+                              level: "{{ LOG_LEVEL }}"
+                              logger: "{{ LOG_LOGGER }}"
+                              message: "{{ LOG_WAIT }} - Waiting {{ delayed_job_completion_duration }} seconds, then I will decide if job_completed state should be entered."
+                          # ***********************
+                          - delay:
+                              seconds: |-
+                                {% if states(delayed_job_completion_timer) == 'active' %}
+                                  {% set t_expiring_date = state_attr(delayed_job_completion_timer, 'finishes_at') %}
+                                  {% set t_remaining_sec = 0 if t_expiring_date == None else (as_datetime(t_expiring_date) - now()).total_seconds() | int %}
+                                  {% set t_total_duration = state_attr(delayed_job_completion_timer, 'duration') %}
+                                  {% set duration_split = t_total_duration.split(':') %}
+                                  {% set t_total_duration_sec  = (duration_split[0] | int * 3600) + (duration_split[1] | int * 60) + (duration_split[0] | int) %}
+                                  {% set t_elapsed_sec = (t_total_duration_sec - t_remaining_sec) | int %}
+                                  {% set t_remaining = ((delayed_job_completion_duration) | int) - t_elapsed_sec %}
+                                  
+                                  {{ 1 + t_remaining }}
+                                {% else %}
+                                  {{ 1 + (delayed_job_completion_duration) | int }}
+                                {% endif %}
+                          # if the delay is elapsed, self trig the atomation
+                          - service: input_boolean.turn_on
+                            data: {}
+                            target:
+                              entity_id: !input "automation_self_trigger"
+                          # make sure that the execution doesn't continue. So that the job_completed state is not reached.
+                          - stop: ""
+            default: [] # Do nothing. End
+          - service: input_boolean.turn_off
+            data: {}
+            target:
+              entity_id: !input "appliance_job_cycle"
+          - service: input_select.select_option
+            data:
+              option: job_completed # FLAG: job_completed STATE TRANSITION
+            target:
+              entity_id: !input "appliance_state_machine"
+          # ***** LOG SECTION *****
+          - service: system_log.write
+            data_template:
+              level: "{{ LOG_LEVEL }}"
+              logger: "{{ LOG_LOGGER }}"
+              message: "{{ LOG_CYCLE_END }} - The Job Cycle is over"
+          # ***********************
+          # ***** LOG SECTION *****
+          - service: system_log.write
+            data_template:
+              level: "{{ LOG_LEVEL }}"
+              logger: "{{ LOG_LOGGER }}"
+              message: "{{ LOG_STATE_CHANGE }} - Entered the job_completed state."
+          # ***********************
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(delayed_job_completion_timer) == 'active' }}"
+                sequence:
+                  - service: timer.cancel
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_completion_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - delayed_job_completion_timer canceled and stopped."
+                  # ***********************
+          # ***** LOG SECTION *****
+          - service: system_log.write
+            data_template:
+              level: "{{ LOG_LEVEL }}"
+              logger: "{{ LOG_LOGGER }}"
+              message: "{{ LOG_CUSTOM_ACTIONS }} - executing actions_job_cycle_ends."
+          # ***********************
+          - choose: []
+            default: !input "actions_job_cycle_ends"
+          - choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: trigger
+                        id: automation_self_triggered
+                      - condition: template
+                        value_template: "{{ delayed_job_completion_duration <= 0 }}"
+                sequence:
+                  # - delay:
+                  #     minutes: 1
+                  # Self trigger once more to move to the idle state
+                  - service: input_boolean.turn_on
+                    data: {}
+                    target:
+                      entity_id: !input "automation_self_trigger"
+    default:
+      ##################################################
+      # NOTE: "idle" state handling logic              #
+      ##################################################
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: !input "appliance_job_cycle"
+                state: "off"
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: !input "appliance_state_machine"
+                    state: idle
+            sequence:
+              - choose:
+                  # IF
+                  - conditions:
+                      # the washer door is closed so dont progress to idle
+                      - condition: state
+                        entity_id: !input "appliance_door_sensor"
+                        state: "off"
+                    sequence:
+                      # ***** LOG SECTION *****
+                      - service: system_log.write
+                        data_template:
+                          level: "{{ LOG_LEVEL }}"
+                          logger: "{{ LOG_LOGGER }}"
+                          message: "{{ LOG_WAIT }} - Door not open, so remaining in job_completed state."
+                      # ***********************
+                      - stop: ""
+                default: [] # Do nothing. End
+              # Go to idle
+              - service: input_select.select_option
+                data:
+                  option: idle # FLAG: idle STATE TRANSITION
+                target:
+                  entity_id: !input "appliance_state_machine"
+              # ***** LOG SECTION *****
+              - service: system_log.write
+                data_template:
+                  level: "{{ LOG_LEVEL }}"
+                  logger: "{{ LOG_LOGGER }}"
+                  message: "{{ LOG_STATE_CHANGE }} - Entered the idle state."
+              # ***********************
+        default:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(delayed_job_ongoing_timer) == 'active' }}"
+                sequence:
+                  - service: timer.cancel
+                    data: {}
+                    target:
+                      entity_id: !input "delayed_job_ongoing_timer"
+                  # ***** LOG SECTION *****
+                  - service: system_log.write
+                    data_template:
+                      level: "{{ LOG_LEVEL }}"
+                      logger: "{{ LOG_LOGGER }}"
+                      message: "{{ LOG_TIMER }} - delayed_job_ongoing_timer canceled and stopped."
+mode: restart
+max_exceeded: silent
+trace:
+  stored_traces: 10
