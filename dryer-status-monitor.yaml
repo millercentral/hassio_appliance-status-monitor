@@ -79,6 +79,30 @@ blueprint:
           unit_of_measurement: seconds
           mode: slider
 
+    delayed_job_completion_duration:
+      name: Delayed Job Completion duration
+      description: >-
+        (OPTIONAL | <i><strong>Suggested: 0, Default: 0 | DISABLED</strong></i>)
+
+
+        During a job cycle, some appliances may intermittently use less power than the finishing power threshold, 
+        thus entering the job_completed state (even when the job is not finished).
+
+        With this value set, the automation will wait for the indicated time in seconds, and monitor during that period the power consumption rises again.
+
+        ...
+
+        <i><strong>WARNING:</strong> Setting a duration introduces a delay on the transition to the 'job_completed' state.
+        Please make sure that you really need this, or leave it 0 if unsure.</i>
+      default: 0.0
+      selector:
+        number:
+          min: 0.0
+          max: 900.0
+          step: 1.0
+          unit_of_measurement: seconds
+          mode: slider
+
     # INPUT_SELECT for state machine
     appliance_state_machine:
       name: Dryer State Machine
