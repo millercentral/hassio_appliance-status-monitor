@@ -204,8 +204,8 @@ blueprint:
 
 # FLAG: Variables
 variables:
-  # Socket info
-  appliance_socket: !input "smartdry_shake"
+  # SmartDry shake sensor
+  smartdry_shake: !input "smartdry_shake"
   # Door info
   appliance_door_sensor: !input "appliance_door_sensor"
 
@@ -223,7 +223,7 @@ variables:
   LOG_CYCLE_START: "CYCLE START"
   LOG_CYCLE_END: "CYCLE END"
   LOG_CUSTOM_ACTIONS: "CUSTOM ACTIONS"
-  LOG_POWER_THRESHOLD: "POWER_THRESHOLD"
+  LOG_SHAKE_THRESHOLD: "SHAKE_THRESHOLD"
   LOG_LEVEL: debug
   LOG_LOGGER: homeassistant.components.dryer_state_blueprint
 
@@ -298,7 +298,7 @@ action:
   - choose:
       # IF (and)
       - conditions:
-          # the power consumption > appliance_starting_power_threshold
+          # the SmartDry shake value > appliance_starting_shake_threshold
           - condition: numeric_state
             entity_id: !input "smartdry_shake"
             above: 10
@@ -345,7 +345,7 @@ action:
                     data_template:
                       level: "{{ LOG_LEVEL }}"
                       logger: "{{ LOG_LOGGER }}"
-                      message: "{{ LOG_POWER_THRESHOLD }} - The starting power threshold was reached"
+                      message: "{{ LOG_SHAKE_THRESHOLD }} - The starting shake threshold was reached"
                   # ***********************
                   # Start the timer, start counting backwards
                   - service: timer.start
@@ -497,7 +497,7 @@ action:
             data_template:
               level: "{{ LOG_LEVEL }}"
               logger: "{{ LOG_LOGGER }}"
-              message: "{{ LOG_POWER_THRESHOLD }} - The finishing power threshold was reached"
+              message: "{{ LOG_SHAKE_THRESHOLD }} - The finishing shake threshold was reached"
           # ***********************
           - choose:
               # IF

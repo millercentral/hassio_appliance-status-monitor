@@ -50,7 +50,7 @@ template: # <- IMPORTANT! Remove the [] if you enable any macro
 
   - sensor:
       - name: Dryer State
-        unique_id: dryer_state
+        icon: mdi:tumble-dryer
         state: >
           {%- macro state_machine_translation(state) -%}
           {% set STATE_MACHINE_TRANSLATION = {
@@ -61,3 +61,38 @@ template: # <- IMPORTANT! Remove the [] if you enable any macro
           {{ STATE_MACHINE_TRANSLATION[state]}}
           {%- endmacro -%}
           {{ state_machine_translation(states('input_select.dryer_state_machine')) }}
+
+        ## Note, this requies the template macro "Easy Time" from HACS to be installed! ###
+      - name: Dryer Job Elapsed Time
+        icon: mdi:timer
+        state: >
+          {% if is_state('input_boolean.dryer_job_cycle', 'on') %}
+            {% from 'easy_time.jinja' import custom_time %}
+            {{ custom_time(states.input_boolean.dryer_job_cycle.last_changed, 'hour, minute') }}
+          {% else -%}
+            off
+          {% endif %}
+
+  - trigger:
+      - platform: state
+        entity_id: input_boolean.dryer_job_cycle
+        from: "off"
+        to: "on"
+    sensor:
+      - name: Dryer - Last Job Started At
+        icon: mdi:calendar-clock
+        state: >
+          {{ states.input_boolean.dryer_job_cycle.last_changed }}
+
+    ## Note, this requies the template macro "Easy Time" from HACS to be installed! ###
+  - trigger:
+      - platform: state
+        entity_id: input_boolean.dryer_job_cycle
+        from: "on"
+        to: "off"
+    sensor:
+      - name: Dryer - Last Job Runtime
+        icon: mdi:timer
+        state: >
+          {% from 'easy_time.jinja' import custom_time %}
+          {{ custom_time('sensor.dryer_last_job_started_at', 'minute') }}

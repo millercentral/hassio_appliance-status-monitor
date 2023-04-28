@@ -11,12 +11,6 @@ timer:
     restore: true
     icon: mdi:washing-machine
 
-  washing_machine_job_completed_persistence_timer:
-    name: Washing Machine - Job completed persistence timer
-    duration: "01:30:00" # <- Notice the time here. Leave as it is (1h 30 min)
-    restore: true
-    icon: mdi:washing-machine
-
 input_boolean:
   washing_machine_job_cycle:
     name: Washing Machine - Job Cycle
@@ -33,16 +27,15 @@ input_select:
       - unplugged
       - idle
       - paused
-      - detached_overload
       - job_ongoing
       - job_completed
     icon: mdi:washing-machine
 
 #_________________________________
 # * ADDITIONAL OPTIONAL FEATURES *
-template: [] # <- IMPORTANT! Remove the [] if you enable any of the code belo
+template: # <- IMPORTANT! Remove the [] if you enable any of the code below
   ## -- MACROS --
-  ## 
+  ##
   ## **OPTIONAL**
   ## NAME: State translation macro
   ## INSTRUCTIONS: https://github.com/leofabri/hassio_appliance-status-monitor/issues/16#issuecomment-1211764562
@@ -54,23 +47,57 @@ template: [] # <- IMPORTANT! Remove the [] if you enable any of the code belo
   ##             It allows you to customize how each state should be displayed on the UI.
   ##             If you want to specify what kind of job your appliance can do, this may come in handy
 
-  ## The template below is DISABLED BY DEFUALT, 
+  ## The template below is DISABLED BY DEFUALT,
   ## if you want to enable it you need to uncomment the lines that will follow (remove all the '# ').
-  ## Press ctrl + K & ctrl + U to uncomment from VSCode. 
+  ## Press ctrl + K & ctrl + U to uncomment from VSCode.
 
-#   - sensor:
-#       - name: Washing Machine Current State - Translated
-#         unique_id: washing_machine_current_state_translated
-#         state: >
-#           {%- macro state_machine_translation(state) -%}
-#           {% set STATE_MACHINE_TRANSLATION = {
-#             "unplugged": "Unplugged",
-#             "idle": "Idle",
-#             "paused": "Paused",
-#             "detached_overload": "Overload",
-#             "job_ongoing": "Washing in progress",
-#             "job_completed": "Washing completed",
-#           } %}
-#           {{ STATE_MACHINE_TRANSLATION[state]}}
-#           {%- endmacro -%}
-#           {{ state_machine_translation(states('input_select.washing_machine_state_machine')) }}
+  - sensor:
+      - name: Washing Machine State
+        icon: mdi:washing-machine
+        state: >
+          {%- macro state_machine_translation(state) -%}
+          {% set STATE_MACHINE_TRANSLATION = {
+            "unplugged": "Unplugged",
+            "idle": "Idle",
+            "paused": "Paused",
+            "job_ongoing": "Running",
+            "job_completed": "Clean",
+          } %}
+          {{ STATE_MACHINE_TRANSLATION[state]}}
+          {%- endmacro -%}
+          {{ state_machine_translation(states('input_select.washing_machine_state_machine')) }}
+
+        ## Note, this requies the template macro "Easy Time" from HACS to be installed! ###
+      - name: Washing Machine Job Elapsed Time
+        icon: mdi:timer
+        state: >
+          {% if is_state('input_boolean.washing_machine_job_cycle', 'on') %}
+            {% from 'easy_time.jinja' import custom_time %}
+            {{ custom_time(states.input_boolean.washing_machine_job_cycle.last_changed, 'hour, minute') }}
+          {% else -%}
+            off
+          {% endif %}
+
+  - trigger:
+      - platform: state
+        entity_id: input_boolean.washing_machine_job_cycle
+        from: "off"
+        to: "on"
+    sensor:
+      - name: Washing Machine - Last Job Started At
+        icon: mdi:calendar-clock
+        state: >
+          {{ states.input_boolean.washing_machine_job_cycle.last_changed }}
+
+    ## Note, this requies the template macro "Easy Time" from HACS to be installed! ###
+  - trigger:
+      - platform: state
+        entity_id: input_boolean.washing_machine_job_cycle
+        from: "on"
+        to: "off"
+    sensor:
+      - name: Washing Machine - Last Job Runtime
+        icon: mdi:timer
+        state: >
+          {% from 'easy_time.jinja' import custom_time %}
+          {{ custom_time('sensor.washing_machine_last_job_started_at', 'minute') }}
