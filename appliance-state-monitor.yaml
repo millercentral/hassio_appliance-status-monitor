@@ -3,7 +3,6 @@ blueprint:
   description: >-
     `- Version: 3.1.0 - millercentral`
 
-
     ASM ('Appliance State Monitor') is an automation that can detect and monitor the state of your appliances through smart plugs.
 
 
