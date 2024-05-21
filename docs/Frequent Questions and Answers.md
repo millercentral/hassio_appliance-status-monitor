@@ -76,7 +76,7 @@
     Open this page [![Open your Home Assistant instance and show your blueprints.](https://my.home-assistant.io/badges/blueprints.svg)](https://my.home-assistant.io/redirect/blueprints/) (just click the link, it's magical) and scroll till you find **"ASM - Monitor the state of an appliance - by leofabri" and delete it** by clicking on the trash bin 🗑. Don't worry, we'll add it right back in a few secs, you can leave the automation as it is for now. <br>
 
     Create the missing helpers (entities) as shown in the instructions
-    Add the blueprint again [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fleofabri%2Fhassio_appliance-status-monitor%2Fblob%2Fmain%2Fappliance-status-monitor.yaml), and reload Home Assistant.
+    Add the blueprint again [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmillercentral%2Fhassio_appliance-status-monitor%2Fblob%2Fmain%2Fappliance-state-monitor.yaml), and reload Home Assistant.
 
     Open your automation and add the previously created helpers (entities)
 
@@ -86,7 +86,7 @@
     cd /config/blueprints/automation/leofabri && curl -sSL https://raw.githubusercontent.com/leofabri/hassio_appliance-status-monitor/release/v3.0.0-dev/appliance-status-monitor.yaml -O
     ```
 
-4. ### **Do you want to know more about this automation's structure?** [You might find this interesting](./Automation%20Structure.md).
+5. ### **Do you want to know more about this automation's structure?** [You might find this interesting](./Automation%20Structure.md).
 
 ...
 ### Got more questions? [Feel free to ask!](https://community.home-assistant.io/t/detect-and-monitor-the-state-of-an-appliance-based-on-its-power-consumption-v2-1-1-updated/) 🙂
