@@ -165,7 +165,7 @@ Back to us, here are the two steps for creating a package:
 
 > Are you **trying to update** to a newer version? [Let's do that in a snap! Follow this guide instead](./docs/Frequent%20Questions%20and%20Answers.md/#how-to-update).
 
-Add this blueprint to your Home Assistant [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fleofabri%2Fhassio_appliance-status-monitor%2Fblob%2Fmain%2Fappliance-status-monitor.yaml)
+Add this blueprint to your Home Assistant [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmillercentral%2Fhassio_appliance-status-monitor%2Fblob%2Fmain%2Fappliance-state-monitor.yaml)
 
 ---
 
